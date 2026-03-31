@@ -1,0 +1,3 @@
+_target_: robocode.environments.conveyorbelt_env.ConveyorBeltEnv
+scene_spec: null
+render_mode: null

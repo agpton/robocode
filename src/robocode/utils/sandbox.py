@@ -51,28 +51,110 @@ data = json.load(sys.stdin)
 tool_name = data.get("tool_name", "")
 tool_input = data.get("tool_input", {})
 
-if tool_name not in ("Write", "Edit"):
-    sys.exit(0)
+# --- Block writes outside the sandbox ---
+if tool_name in ("Write", "Edit"):
+    file_path = tool_input.get("file_path", "")
+    if file_path:
+        sandbox = os.path.realpath(os.getcwd())
+        resolved = os.path.realpath(file_path)
+        if not (resolved == sandbox or resolved.startswith(sandbox + os.sep)):
+            json.dump({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        f"Blocked: {file_path} resolves outside the sandbox directory"
+                    ),
+                }
+            }, sys.stdout)
+            sys.exit(0)
 
-file_path = tool_input.get("file_path", "")
-if not file_path:
-    sys.exit(0)
+# --- Block reads of environment source files ---
+BLOCKED_PREFIXES = ("/robocode/src/robocode/environments/",)
 
-sandbox = os.path.realpath(os.getcwd())
-resolved = os.path.realpath(file_path)
+if tool_name in ("Read", "Grep"):
+    file_path = tool_input.get("file_path", "") or tool_input.get("path", "")
+    if file_path:
+        resolved = os.path.realpath(file_path)
+        for prefix in BLOCKED_PREFIXES:
+            if resolved.startswith(prefix):
+                json.dump({
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            f"Blocked: reading environment source files is not allowed. "
+                            f"Use the environment\\'s docstring and explore by interacting with it."
+                        ),
+                    }
+                }, sys.stdout)
+                sys.exit(0)
 
-if resolved == sandbox or resolved.startswith(sandbox + os.sep):
-    sys.exit(0)
+if tool_name == "Glob":
+    search_path = tool_input.get("path", "")
+    if search_path:
+        resolved = os.path.realpath(search_path)
+        for prefix in BLOCKED_PREFIXES:
+            if resolved.startswith(prefix) or prefix.startswith(resolved):
+                json.dump({
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            f"Blocked: browsing environment source files is not allowed. "
+                            f"Use the environment\\'s docstring and explore by interacting with it."
+                        ),
+                    }
+                }, sys.stdout)
+                sys.exit(0)
 
-json.dump({
-    "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "deny",
-        "permissionDecisionReason": (
-            f"Blocked: {file_path} resolves outside the sandbox directory"
-        ),
-    }
-}, sys.stdout)
+# --- Block Bash commands that introspect the environment module ---
+if tool_name == "Bash":
+    import re as _re
+    cmd = tool_input.get("command", "")
+    cmd_lower = cmd.lower()
+
+    # Patterns that indicate environment introspection
+    _BLOCKED_BASH_PATTERNS = [
+        # Importing or referencing the environment module via Python
+        r"import\\s+robocode\\.environments",
+        r"from\\s+robocode\\.environments",
+        r"robocode\\.environments\\.",
+        r"conveyorbelt_env",
+        # Reading .pyc files or environment source directory
+        r"/robocode/src/robocode/environments/",
+        # Bytecode decompilation tools
+        r"\\buncompyle",
+        r"\\bdecompyle",
+        r"\\bpycdc\\b",
+        r"\\bdis\\.dis\\b",
+        r"\\bdis\\.disassemble\\b",
+        r"\\bdisassemble\\b.*\\.pyc",
+        r"\\.pyc\\b",
+        # Marshal/bytecode reading
+        r"\\bmarshal\\.loads\\b",
+        r"\\bimportlib.*conveyorbelt",
+        # Inspecting module internals
+        r"inspect\\.getsource.*conveyorbelt",
+        r"inspect\\.getsource.*environments",
+        r"__import__.*environments",
+    ]
+
+    for pattern in _BLOCKED_BASH_PATTERNS:
+        if _re.search(pattern, cmd, _re.IGNORECASE):
+            json.dump({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "Blocked: introspecting environment internals via Bash is not allowed. "
+                        "Explore the environment by interacting with it through your approach."
+                    ),
+                }
+            }, sys.stdout)
+            sys.exit(0)
+
+sys.exit(0)
 """
 
 _SANDBOX_GITIGNORE = """\
@@ -92,7 +174,7 @@ _SANDBOX_SETTINGS: dict = {
     "hooks": {
         "PreToolUse": [
             {
-                "matcher": "Write|Edit",
+                "matcher": "Write|Edit|Read|Grep|Glob|Bash",
                 "hooks": [
                     {
                         "type": "command",

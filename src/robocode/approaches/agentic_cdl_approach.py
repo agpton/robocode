@@ -296,6 +296,7 @@ class AgenticCDLApproach(BaseApproach[_ObsType, _ActType]):
         mcp_tools: tuple[str, ...] = (),
         max_output_tokens: int = 16384,
         autocompact_pct: int = 80,
+        failure_monitor_file: str | None = None,
     ) -> None:
         super().__init__(
             action_space,
@@ -311,6 +312,9 @@ class AgenticCDLApproach(BaseApproach[_ObsType, _ActType]):
         self._use_docker = use_docker
         self._geometry_prompt = geometry_prompt
         self._mcp_tools = mcp_tools
+        self._failure_monitor_file = (
+            Path(failure_monitor_file) if failure_monitor_file else None
+        )
         self._max_output_tokens = max_output_tokens
         self._autocompact_pct = autocompact_pct
         self._generated: Any = None
@@ -405,6 +409,7 @@ class AgenticCDLApproach(BaseApproach[_ObsType, _ActType]):
                 mcp_tools=self._mcp_tools,
                 max_output_tokens=self._max_output_tokens,
                 autocompact_pct=self._autocompact_pct,
+                failure_monitor_file=self._failure_monitor_file,
             )
             sandbox_logger = logging.getLogger("robocode.utils.docker_sandbox")
         else:

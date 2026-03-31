@@ -2,10 +2,11 @@
 
 The agent selects a drop-rate mode each step (off / slow / mid / fast).
 The environment internally handles drop timing and physics.  A hidden
-``secret_sequence`` of 8 modes triggers an explosion when issued in order
-— the failure finder's job is to discover this sequence.
+secret sequence of modes triggers an explosion when issued in order
+— the agent's job is to discover this sequence through exploration.
 """
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,7 +18,7 @@ from gymnasium.core import RenderFrame
 # Box, Dict added for llm
 from gymnasium.spaces import Box, Dict, Discrete
 from numpy.typing import NDArray
-from tomsutils.utils import fig2data
+from prpl_utils.utils import fig2data
 
 OFF = 0
 SLOW = 1
@@ -26,6 +27,19 @@ FAST = 3
 NUM_MODES = 4
 MODE_NAMES = ["off", "slow", "mid", "fast"]
 MAX_BOXES = 32  # fixed observation array length; slots beyond active boxes are 0
+
+
+def _secret_hash(history: list[int], salt: str = "conveyorbelt_v1", length: int = 8) -> bool:
+    """Check whether the tail of *history* matches the secret sequence.
+
+    The sequence is derived from a hash and compared in constant time so that
+    it never materialises as a stored attribute the agent could inspect.
+    """
+    if len(history) < length:
+        return False
+    digest = hashlib.sha256(salt.encode()).digest()
+    tail = history[-length:]
+    return all(tail[i] == digest[i] % NUM_MODES for i in range(length))
 
 
 @dataclass(frozen=True)
@@ -40,9 +54,6 @@ class ConveyorBeltSceneSpec:
     gravity: float = 9.81
     drop_start_height: float = 1.0
     initial_drop_position: float = 0.0
-    secret_sequence: list[int] = field(
-        default_factory=lambda: [FAST, SLOW, FAST, MID, FAST, FAST, FAST, SLOW]
-    )
 
 
 class ConveyorBeltEnv(gym.Env[dict[str, Any], int]):
@@ -58,6 +69,7 @@ class ConveyorBeltEnv(gym.Env[dict[str, Any], int]):
     """
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 50}
+    env_description = "1D conveyor belt environment with packages. Agent selects drop-rate mode each step."
 
     def __init__(
         self,
@@ -126,9 +138,8 @@ class ConveyorBeltEnv(gym.Env[dict[str, Any], int]):
         mode = int(action)
         self._mode_history.append(mode)
 
-        # Check secret sequence.
-        seq = self.scene_spec.secret_sequence
-        if self._mode_history[-len(seq) :] == seq:
+        # Check secret sequence (computed on the fly, never stored).
+        if _secret_hash(self._mode_history):
             self._exploded = True
 
         if not self._exploded:

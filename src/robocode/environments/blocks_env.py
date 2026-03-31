@@ -160,6 +160,7 @@ class BlocksEnv(gym.Env[dict[str, Any], dict[str, Any]]):
     """
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
+    env_description = "PyBullet block stacking environment. Agent issues high-level commands (Pick, Unstack, Stack)."
 
     def __init__(
         self,

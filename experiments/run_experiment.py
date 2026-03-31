@@ -19,6 +19,8 @@ Parallel sweep with joblib launcher:
         hydra/launcher=joblib hydra.launcher.n_jobs=4
 """
 
+import importlib
+import inspect
 import json
 import logging
 from pathlib import Path
@@ -32,6 +34,8 @@ from omegaconf import DictConfig, OmegaConf
 from robocode.primitives import build_primitives
 from robocode.utils.approach_history import get_snapshots, record_episodes
 from robocode.utils.episode import run_episode, save_video
+
+from gym_failure_discovery.failure_monitor_wrapper import FailureMonitorWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +58,19 @@ def _main(cfg: DictConfig) -> float:
 
     primitives = build_primitives(env, cfg.primitives)
 
+    # Wrap with failure monitor if configured (after primitives are built
+    # so they bind to the raw env, and after env_description is read).
+    failure_monitor_file: str | None = None
+    fm_target = OmegaConf.select(cfg, "failure_monitor._target_")
+    if fm_target is not None:
+        failure_monitor = hydra.utils.instantiate(cfg.failure_monitor)
+        if failure_monitor is not None:
+            env = FailureMonitorWrapper(env, failure_monitor)
+        # Resolve the source file so the sandbox agent can read it.
+        fm_module_path = fm_target.rsplit(".", 1)[0]
+        fm_mod = importlib.import_module(fm_module_path)
+        failure_monitor_file = inspect.getfile(fm_mod)
+
     # Write env config for MCP server (if mcp_tools are configured).
     mcp_tools = tuple(cfg.get("mcp_tools", []))
     if mcp_tools:
@@ -70,6 +87,7 @@ def _main(cfg: DictConfig) -> float:
         primitives=primitives,
         env_description_path=env_description_path,
         mcp_tools=mcp_tools,
+        failure_monitor_file=failure_monitor_file,
     )
 
     task_rng = np.random.default_rng(cfg.seed)

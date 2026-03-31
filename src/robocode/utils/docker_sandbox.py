@@ -140,6 +140,7 @@ class DockerSandboxConfig(SandboxConfig):
     docker_image: str = _DEFAULT_IMAGE
     primitive_names: tuple[str, ...] = ()
     mcp_tools: tuple[str, ...] = ()
+    failure_monitor_file: Path | None = None
 
 
 def _setup_sandbox_dir(config: DockerSandboxConfig) -> None:
@@ -174,6 +175,15 @@ def _setup_sandbox_dir(config: DockerSandboxConfig) -> None:
             else:
                 raise RuntimeError(f"Primitive source file not found: {src_file}")
 
+    # Copy the failure monitor file into the sandbox if provided.
+    if config.failure_monitor_file is not None:
+        fm_src = config.failure_monitor_file
+        if fm_src.exists():
+            fm_dest = config.sandbox_dir / "failure_monitor.py"
+            shutil.copy2(fm_src, fm_dest)
+        else:
+            logger.warning("Failure monitor file not found: %s", fm_src)
+
     # CLAUDE.md — written once; describes the Docker environment.
     claude_md = config.sandbox_dir / "CLAUDE.md"
     if not claude_md.exists():
@@ -202,6 +212,12 @@ def _setup_sandbox_dir(config: DockerSandboxConfig) -> None:
         if config.primitive_names:
             claude_md_text += (
                 "\nPrimitive source files (for reference) are in " "./primitives/\n"
+            )
+        if config.failure_monitor_file is not None:
+            claude_md_text += (
+                "\nThe failure monitor for this environment is in "
+                "./failure_monitor.py — read it to understand what "
+                "counts as a failure (solving the task).\n"
             )
         claude_md.write_text(claude_md_text)
 

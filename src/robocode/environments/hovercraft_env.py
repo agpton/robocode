@@ -16,7 +16,7 @@ from gymnasium.core import RenderFrame
 from gymnasium.spaces import Discrete
 from numpy.typing import NDArray
 from tomsgeoms2d.structs import Circle, Geom2D, Rectangle
-from tomsutils.utils import fig2data
+from prpl_utils.utils import fig2data
 
 
 @dataclass(frozen=True)
@@ -115,6 +115,7 @@ class HoverCraftEnv(gym.Env[np.ndarray, int]):
     """
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
+    env_description = "Hovercraft environment with LQR controller. Agent issues high-level commands."
 
     def __init__(
         self,

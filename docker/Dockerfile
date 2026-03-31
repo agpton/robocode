@@ -102,6 +102,15 @@ COPY src/ src/
 RUN uv sync --frozen --python python3.11
 
 # ---------------------------------------------------------------------------
+# Compile environment source to bytecode and remove .py files so the sandbox
+# agent cannot read the source code (it must explore the env by interacting
+# with it).  The -b flag places .pyc alongside (not in __pycache__/).
+# ---------------------------------------------------------------------------
+RUN /robocode/.venv/bin/python -m compileall -b -q src/robocode/environments/ \
+    && find src/robocode/environments/ -maxdepth 1 -name "*.py" \
+       ! -name "__init__.py" -delete
+
+# ---------------------------------------------------------------------------
 # Entrypoint: init firewall → exec claude
 # ---------------------------------------------------------------------------
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
