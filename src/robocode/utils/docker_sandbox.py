@@ -221,6 +221,18 @@ def _setup_sandbox_dir(config: DockerSandboxConfig) -> None:
             )
         claude_md.write_text(claude_md_text)
 
+    # Drop a sitecustomize.py that blocks bytecode introspection at runtime.
+    # This prevents agents from writing scripts that use dis, marshal, or
+    # __code__ to reverse-engineer environment .pyc files.
+    sitecustomize = config.sandbox_dir / "sitecustomize.py"
+    sitecustomize.write_text(
+        '"""Block bytecode introspection in sandbox scripts."""\n'
+        "import sys\n\n"
+        "# Remove dis and marshal so agents cannot disassemble .pyc files.\n"
+        "for _mod in ('dis', 'marshal'):\n"
+        "    sys.modules[_mod] = None  # type: ignore[assignment]\n"
+    )
+
 
 async def run_agent_in_docker_sandbox(
     config: DockerSandboxConfig,

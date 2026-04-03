@@ -69,6 +69,41 @@ if tool_name in ("Write", "Edit"):
             }, sys.stdout)
             sys.exit(0)
 
+# --- Block writing scripts that contain bytecode introspection ---
+if tool_name in ("Write",):
+    import re as _re
+    content = tool_input.get("content", "")
+    _BLOCKED_CONTENT_PATTERNS = [
+        r"\\bimport\\s+dis\\b",
+        r"\\bfrom\\s+dis\\b",
+        r"\\bimport\\s+marshal\\b",
+        r"\\bfrom\\s+marshal\\b",
+        r"\\b__code__\\b",
+        r"\\bco_consts\\b",
+        r"\\bco_code\\b",
+        r"\\bco_names\\b",
+        r"\\bco_varnames\\b",
+        r"\\bdis\\.dis\\b",
+        r"\\bdis\\.disassemble\\b",
+        r"\\bdis\\.get_instructions\\b",
+        r"\\bmarshal\\.loads\\b",
+        r"\\buncompyle",
+        r"\\bdecompyle",
+    ]
+    for pattern in _BLOCKED_CONTENT_PATTERNS:
+        if _re.search(pattern, content, _re.IGNORECASE):
+            json.dump({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "Blocked: bytecode introspection (dis, marshal, __code__) is not allowed. "
+                        "Explore the environment by interacting with it, not by reverse-engineering."
+                    ),
+                }
+            }, sys.stdout)
+            sys.exit(0)
+
 # --- Block reads of environment source files ---
 BLOCKED_PREFIXES = ("/robocode/src/robocode/environments/",)
 

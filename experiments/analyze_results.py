@@ -67,6 +67,8 @@ def _main() -> None:
         numeric_cols.remove("seed")
     group_cols = [c for c in dataframe.columns if c not in numeric_cols and c != "seed"]
 
+    dataframe = dataframe.fillna("N/A")
+
     seed_info = (
         dataframe.groupby(group_cols, sort=False)["seed"]
         .agg(seeds=lambda s: sorted(s.astype(str)))
