@@ -175,12 +175,34 @@ IMPORTANT: be careful about repeated behavior! If an action or strategy in your 
 approach fails, you should design your code to avoid repeating that failure.
 """
 
+_FAILURE_MONITOR_PROMPT = """\
+
+OBJECTIVE: Your goal is to trigger the failure condition defined in `failure_monitor.py`. \
+The failure monitor is copied into your sandbox — read it carefully. When the failure \
+monitor's `step()` method returns True, the episode succeeds (reward=1, terminated=True). \
+Your approach must cause this condition to occur as quickly and reliably as possible.
+
+The failure monitor code is shown below for reference:
+```python
+{failure_monitor_source}
+```
+
+IMPORTANT: The environment description below describes the environment's general dynamics \
+and mechanics — it is NOT the goal. Use it to understand how the environment works \
+(what actions do, what observations mean, how physics behaves), but your objective is \
+SOLELY to trigger the failure condition above. The environment description may mention \
+goals or success criteria that are DIFFERENT from yours — ignore those and focus on \
+the failure monitor.\
+"""
+
 _PROMPT_WITH_DESCRIPTION = """\
 You are writing an approach for the environment described below.
 
 Your approach should be general enough to solve any instance of this environment (env.reset()), \
 but it does NOT need to be adaptable to different other environments.
+{failure_monitor_prompt}
 
+{env_description_label}
 {env_description}
 {geometry_prompt}
 {interface_spec}
@@ -205,7 +227,7 @@ class AgenticApproach(BaseApproach[_ObsType, _ActType]):
         seed: int,
         primitives: dict[str, Callable[..., Any]],
         env_description_path: str | None = None,
-        model: str = "sonnet",
+        model: str = "opus",
         max_budget_usd: float = 5.0,
         output_dir: str = ".",
         load_dir: str | None = None,
@@ -291,11 +313,26 @@ class AgenticApproach(BaseApproach[_ObsType, _ActType]):
         if self._env_description_path is not None:
             env_desc = Path(self._env_description_path).read_text(encoding="utf-8")
             geometry = _GEOMETRY_PROMPT if self._geometry_prompt else ""
+
+            # Build failure monitor prompt if a monitor file is provided.
+            failure_monitor_prompt = ""
+            env_description_label = "Environment description:"
+            if self._failure_monitor_file is not None:
+                fm_source = self._failure_monitor_file.read_text(encoding="utf-8")
+                failure_monitor_prompt = _FAILURE_MONITOR_PROMPT.format(
+                    failure_monitor_source=fm_source,
+                )
+                env_description_label = (
+                    "Environment description (for understanding dynamics, NOT the goal):"
+                )
+
             prompt = _PROMPT_WITH_DESCRIPTION.format(
                 env_description=env_desc,
                 geometry_prompt=geometry,
                 modular_code_prompt=modular,
                 interface_spec=interface_spec,
+                failure_monitor_prompt=failure_monitor_prompt,
+                env_description_label=env_description_label,
             )
         else:
             prompt = _PROMPT_WITH_SOURCE.format(

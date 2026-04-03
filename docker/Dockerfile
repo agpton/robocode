@@ -41,7 +41,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         iptables \
         ipset \
         iproute2 \
-        dnsutils \
         aggregate \
         python3.11 \
         python3.11-venv \

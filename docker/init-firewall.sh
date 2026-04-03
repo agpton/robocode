@@ -61,7 +61,7 @@ for domain in \
     "sentry.io" \
     "statsig.anthropic.com" \
     "statsig.com"; do
-    ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
+    ips=$(getent ahostsv4 "$domain" 2>/dev/null | awk '{print $1}' | sort -u)
     if [ -z "$ips" ]; then
         echo "WARNING: could not resolve $domain" >&2
         continue

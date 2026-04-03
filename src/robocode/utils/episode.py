@@ -10,6 +10,7 @@ from typing import Any
 import imageio.v3 as iio
 import numpy as np
 from numpy.typing import NDArray
+from pybullet_helpers.inverse_kinematics import InverseKinematicsError
 
 from robocode.approaches.base_approach import BaseApproach
 
@@ -70,9 +71,44 @@ def run_episode(
     total_reward = 0.0
     num_steps = 0
     terminated = False
+    consecutive_ik_failures = 0
+    max_consecutive_ik_failures = 10
     for _ in range(max_steps):
         action = approach.step()
-        state, reward, terminated, truncated, info = env.step(action)
+        # Save robot joints before stepping so we can restore them if
+        # IK fails partway through an action (e.g. pick moves the arm
+        # down then the lift-up raises InverseKinematicsError, leaving
+        # the joints in a corrupted intermediate configuration).
+        saved_joints = None
+        if hasattr(env, "robot"):
+            saved_joints = list(env.robot.get_joint_positions())
+        try:
+            state, reward, terminated, truncated, info = env.step(action)
+            consecutive_ik_failures = 0
+        except InverseKinematicsError:
+            consecutive_ik_failures += 1
+            logger.warning(
+                "IK failed for action %s (%d consecutive); treating as no-op",
+                action,
+                consecutive_ik_failures,
+            )
+            # Restore robot joints to pre-action state so the env is
+            # not left in a corrupted intermediate configuration.
+            if saved_joints is not None:
+                env.robot.set_joints(saved_joints)
+            # Fetch the actual observation (block positions may have
+            # shifted due to partial execution + physics).
+            if hasattr(env, "_get_obs"):
+                state = env._get_obs()
+            reward = 0.0
+            terminated = False
+            truncated = consecutive_ik_failures >= max_consecutive_ik_failures
+            info = {"ik_failed": True}
+            if truncated:
+                logger.warning(
+                    "Truncating episode after %d consecutive IK failures",
+                    max_consecutive_ik_failures,
+                )
         total_reward += float(reward)
         num_steps += 1
         approach.update(state, float(reward), terminated or truncated, info)

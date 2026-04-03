@@ -49,7 +49,7 @@ class BlocksSceneSpec:
     gravity: float = 9.80665
     num_sim_steps_per_action: int = 30
     safe_height: float = 0.25
-    max_smoothing_iters_per_step: int = 1
+    max_smoothing_iters_per_step: int = 100
 
     robot_name: str = "panda"
     robot_base_pose: Pose = Pose.identity()
@@ -160,7 +160,17 @@ class BlocksEnv(gym.Env[dict[str, Any], dict[str, Any]]):
     """
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
-    env_description = "PyBullet block stacking environment. Agent issues high-level commands (Pick, Unstack, Stack)."
+    env_description = (
+        "PyBullet block stacking environment. Agent issues high-level "
+        "commands (Pick, Unstack, Stack). The robot arm has a limited "
+        "workspace — stacking too many blocks into a single tall tower "
+        "will cause actions to fail because the arm cannot reach high "
+        "enough (the info dict will contain 'ik_failed': True). When "
+        "stacking fails due to reachability, the tower has reached its "
+        "maximum height and the goal should be considered achieved. The "
+        "approach should monitor info for 'ik_failed' and treat it as a "
+        "signal to stop — do not keep retrying the same unreachable action."
+    )
 
     def __init__(
         self,

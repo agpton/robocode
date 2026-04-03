@@ -63,7 +63,17 @@ def _main(cfg: DictConfig) -> float:
     failure_monitor_file: str | None = None
     fm_target = OmegaConf.select(cfg, "failure_monitor._target_")
     if fm_target is not None:
-        failure_monitor = hydra.utils.instantiate(cfg.failure_monitor)
+        # Some failure monitors need env-derived args (scene_spec, env)
+        # that contain non-serializable objects (e.g. Geom2D).  Hydra's
+        # instantiate tries to merge kwargs into OmegaConf and chokes,
+        # so we import and construct these monitors directly.
+        fm_cls = hydra.utils.get_class(fm_target)
+        if "hovercraft" in fm_target:
+            failure_monitor = fm_cls(scene_spec=env.scene_spec)
+        elif "blocks" in fm_target and "BlocksFailureMonitor" in fm_target:
+            failure_monitor = fm_cls(env=env)
+        else:
+            failure_monitor = hydra.utils.instantiate(cfg.failure_monitor)
         if failure_monitor is not None:
             env = FailureMonitorWrapper(env, failure_monitor)
         # Resolve the source file so the sandbox agent can read it.
